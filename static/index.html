@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Indoor University Navigation</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">UNI MAP · MVP</p>
+      <h1>Indoor University Navigation</h1>
+    </div>
+    <a class="editor-link" href="/editor">Graph editor</a>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls" aria-labelledby="route-heading">
+      <div class="panel-heading">
+        <p class="eyebrow">Plan a route</p>
+        <h2 id="route-heading">Where do you want to go?</h2>
+      </div>
+
+      <label class="field">
+        <span>Start</span>
+        <input id="from-input" type="search" placeholder="Search a room or entrance" autocomplete="off">
+        <div id="from-results" class="suggestions" role="listbox"></div>
+      </label>
+
+      <label class="field">
+        <span>Destination</span>
+        <input id="to-input" type="search" placeholder="Search for a room" autocomplete="off">
+        <div id="to-results" class="suggestions" role="listbox"></div>
+      </label>
+
+      <fieldset class="preferences">
+        <legend>Route preferences</legend>
+        <label><input id="avoid-stairs" type="checkbox"> Avoid stairs</label>
+        <label><input id="avoid-outdoor" type="checkbox"> Avoid outdoor paths</label>
+        <label><input id="prefer-elevator" type="checkbox"> Prefer elevators</label>
+      </fieldset>
+
+      <button id="route-button" class="primary" type="button">Calculate route</button>
+      <p id="status" class="status" role="status"></p>
+      <div id="route-summary" class="route-summary" hidden></div>
+    </section>
+
+    <section class="panel map-panel" aria-labelledby="map-heading">
+      <div class="map-toolbar">
+        <div>
+          <p class="eyebrow">Map</p>
+          <h2 id="map-heading">Building 1</h2>
+        </div>
+        <div id="floor-tabs" class="floor-tabs" role="tablist" aria-label="Floor selection"></div>
+      </div>
+      <div id="map" class="map" aria-label="Interactive floor map"></div>
+      <p class="map-hint">Select a floor to inspect the route. The highlighted line follows graph node coordinates.</p>
+    </section>
+  </main>
+  <script src="/assets/app.js" type="module"></script>
+</body>
+</html>

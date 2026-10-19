@@ -1,0 +1,1 @@
+"""Indoor university navigation application."""

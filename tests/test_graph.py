@@ -1,0 +1,165 @@
+from pathlib import Path
+
+import pytest
+
+from app.graph import GraphData, GraphDocument, load_graph, load_graph_document, save_graph
+from app.routing import RouteNotFoundError, calculate_route
+
+
+SAMPLE_GRAPH = GraphData.model_validate(
+    {
+        "nodes": [
+            {"id": "start", "type": "entrance", "building": 1, "floor": 1, "x": 0, "y": 0},
+            {"id": "stairs", "type": "stairs", "building": 1, "floor": 1, "x": 10, "y": 0},
+            {"id": "elevator", "type": "elevator", "building": 1, "floor": 1, "x": 0, "y": 10},
+            {"id": "destination", "type": "room", "name": "101", "building": 1, "floor": 1, "x": 20, "y": 0},
+        ],
+        "edges": [
+            {"from": "start", "to": "stairs", "distance": 1, "stairs": True, "bidirectional": True},
+            {"from": "stairs", "to": "destination", "distance": 1, "stairs": True, "bidirectional": True},
+            {"from": "start", "to": "elevator", "distance": 4, "elevator": True, "bidirectional": True},
+            {"from": "elevator", "to": "destination", "distance": 4, "elevator": True, "bidirectional": True},
+        ],
+    }
+)
+
+
+def test_dijkstra_returns_shortest_physical_route_by_default() -> None:
+    result = calculate_route(SAMPLE_GRAPH, "start", "destination")
+
+    assert result.route == ["start", "stairs", "destination"]
+    assert result.distance == 2
+    assert result.cost == 2
+
+
+def test_avoid_stairs_selects_longer_route() -> None:
+    result = calculate_route(SAMPLE_GRAPH, "start", "destination", avoid_stairs=True)
+
+    assert result.route == ["start", "elevator", "destination"]
+    assert result.distance == 8
+    assert result.cost == 8
+
+
+def test_prefer_elevator_can_choose_a_longer_elevator_route() -> None:
+    graph = GraphData.model_validate(
+        {
+            "nodes": [
+                {"id": "start", "type": "entrance", "building": 1, "floor": 1, "x": 0, "y": 0},
+                {"id": "stairs", "type": "stairs", "building": 1, "floor": 1, "x": 10, "y": 0},
+                {"id": "elevator", "type": "elevator", "building": 1, "floor": 1, "x": 0, "y": 10},
+                {"id": "destination", "type": "room", "name": "101", "building": 1, "floor": 1, "x": 20, "y": 0},
+            ],
+            "edges": [
+                {"from": "start", "to": "stairs", "distance": 5},
+                {"from": "stairs", "to": "destination", "distance": 5},
+                {"from": "start", "to": "elevator", "distance": 5, "elevator": True},
+                {"from": "elevator", "to": "destination", "distance": 6, "elevator": True},
+            ],
+        }
+    )
+
+    result = calculate_route(graph, "start", "destination", prefer_elevator=True)
+
+    assert result.route == ["start", "elevator", "destination"]
+    assert result.distance == 11
+    assert result.cost == 8.8
+
+
+def test_missing_route_raises_domain_error() -> None:
+    graph = GraphData.model_validate(
+        {
+            "nodes": [
+                {"id": "a", "type": "corridor", "building": 1, "floor": 1, "x": 0, "y": 0},
+                {"id": "b", "type": "corridor", "building": 1, "floor": 1, "x": 1, "y": 1},
+            ],
+            "edges": [],
+        }
+    )
+
+    with pytest.raises(RouteNotFoundError):
+        calculate_route(graph, "a", "b")
+
+
+def test_loader_combines_floor_files() -> None:
+    graph = load_graph(Path("data"))
+
+    assert "room_101" in graph.nodes_by_id
+    assert "room_201" in graph.nodes_by_id
+    assert len(graph.nodes) >= 10
+
+
+def test_duplicate_edges_are_rejected() -> None:
+    with pytest.raises(ValueError, match="duplicate edge"):
+        GraphData.model_validate(
+            {
+                "nodes": [
+                    {"id": "a", "type": "corridor", "building": 1, "floor": 1, "x": 0, "y": 0},
+                    {"id": "b", "type": "corridor", "building": 1, "floor": 1, "x": 1, "y": 1},
+                ],
+                "edges": [
+                    {"from": "a", "to": "b", "distance": 1},
+                    {"from": "a", "to": "b", "distance": 1},
+                ],
+            }
+        )
+
+
+def test_bidirectional_reverse_edges_are_rejected() -> None:
+    with pytest.raises(ValueError, match="duplicate edge"):
+        GraphData.model_validate(
+            {
+                "nodes": [
+                    {"id": "a", "type": "corridor", "building": 1, "floor": 1, "x": 0, "y": 0},
+                    {"id": "b", "type": "corridor", "building": 1, "floor": 1, "x": 1, "y": 1},
+                ],
+                "edges": [
+                    {"from": "a", "to": "b", "distance": 1, "bidirectional": True},
+                    {"from": "b", "to": "a", "distance": 1, "bidirectional": True},
+                ],
+            }
+        )
+
+
+def test_saved_document_is_loaded_from_canonical_file(tmp_path) -> None:
+    document = GraphDocument.model_validate(
+        {
+            "nodes": [
+                {"id": "room_test", "type": "room", "name": "Test", "building": 1, "floor": 1, "x": 10, "y": 20}
+            ],
+            "edges": [],
+            "floors": [{"building": 1, "floor": 1, "map": "test.svg"}],
+        }
+    )
+
+    path = save_graph(tmp_path, document)
+    loaded = load_graph_document(tmp_path)
+
+    assert path.name == "graph.json"
+    assert loaded == document
+
+
+def test_edge_preserves_editor_auto_distance_flag() -> None:
+    graph = GraphData.model_validate(
+        {
+            "nodes": [
+                {"id": "a", "type": "corridor", "building": 1, "floor": 1, "x": 0, "y": 0},
+                {"id": "b", "type": "corridor", "building": 1, "floor": 1, "x": 3, "y": 4},
+            ],
+            "edges": [{"from": "a", "to": "b", "distance": 5, "autoDistance": True}],
+        }
+    )
+
+    assert graph.edges[0].auto_distance is True
+    assert graph.model_dump(by_alias=True)["edges"][0]["autoDistance"] is True
+
+
+def test_invalid_edge_reference_is_rejected() -> None:
+    with pytest.raises(ValueError, match="missing node"):
+        GraphData.model_validate(
+            {
+                "nodes": [
+                    {"id": "a", "type": "corridor", "building": 1, "floor": 1, "x": 0, "y": 0}
+                ],
+                "edges": [{"from": "a", "to": "missing", "distance": 1}],
+            }
+        )
