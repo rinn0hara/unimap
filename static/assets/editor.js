@@ -1,6 +1,9 @@
+import { createGraphNode } from "./editor-model.mjs";
+
 const state = {
   graph: { nodes: [], edges: [], floors: [] },
   tool: "select",
+  building: 1,
   floor: 1,
   selected: null,
   pendingEdge: null,
@@ -13,8 +16,9 @@ const canvas = $("#editor-map-canvas");
 const status = $("#editor-status");
 const validation = $("#validation");
 
-const nodeTypes = ["room", "door", "corridor", "intersection", "stairs", "elevator", "entrance", "connection"];
-const typeColors = { room: "#6b8fd3", door: "#81909f", corridor: "#9aa8b6", intersection: "#6f7d8b", stairs: "#df9d2c", elevator: "#4e87d9", entrance: "#2457d6", connection: "#8d5ec2" };
+const nodeTypes = ["street", "normal", "stairs", "elevator"];
+const typeColors = { street: "#2f9e62", normal: "#9aa8b6", stairs: "#df9d2c", elevator: "#4e87d9" };
+let verifyToken = 0;
 
 function setStatus(message, isError = false) {
   status.textContent = message;
@@ -22,7 +26,8 @@ function setStatus(message, isError = false) {
 }
 
 function visibleNodes() {
-  return state.graph.nodes.filter((node) => Number(node.floor) === Number(state.floor));
+  return state.graph.nodes.filter((node) => Number(node.building) === Number(state.building)
+    && Number(node.floor) === Number(state.floor));
 }
 
 function visibleEdges() {
@@ -120,7 +125,7 @@ function renderOverlay() {
     circle.classList.add("editor-node");
     if (state.selected?.type === "node" && state.selected.value === node.id) circle.classList.add("selected");
     if (state.pendingEdge === node.id) circle.classList.add("pending");
-    circle.setAttribute("cx", node.x); circle.setAttribute("cy", node.y); circle.setAttribute("r", node.type === "room" ? "8" : "7");
+    circle.setAttribute("cx", node.x); circle.setAttribute("cy", node.y); circle.setAttribute("r", node.name ? "8" : "7");
     circle.style.fill = typeColors[node.type] || "#81909f";
     circle.dataset.nodeId = node.id;
     circle.addEventListener("pointerdown", (event) => startNodeInteraction(event, node));
@@ -152,7 +157,7 @@ function startNodeInteraction(event, node) {
   if (state.tool === "select") {
     selectObject("node", node.id);
     state.drag = { node, pointerId: event.pointerId };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* pointer already released */ }
   }
 }
 
@@ -160,12 +165,22 @@ function setupMapInteractions() {
   state.svg.addEventListener("click", (event) => {
     if (state.tool !== "node" || event.target.closest(".editor-overlay")) return;
     const point = pointFromEvent(event);
-    const base = `node_${state.floor}_${state.graph.nodes.length + 1}`;
-    let id = base; let suffix = 1;
-    while (nodeById(id)) id = `${base}_${suffix++}`;
-    state.graph.nodes.push({ id, type: "corridor", name: "", building: 1, floor: state.floor, x: point.x, y: point.y });
+    const selectedFloor = state.graph.floors.find((floor) => Number(floor.building) === Number(state.building)
+      && Number(floor.floor) === Number(state.floor));
+    const node = createGraphNode(state.graph.nodes, {
+      building: Number(selectedFloor?.building || 1),
+      floor: state.floor,
+      x: point.x,
+      y: point.y,
+      type: $("#new-node-type").value,
+      name: $("#new-node-name").value,
+    });
+    const id = node.id;
+    state.graph.nodes.push(node);
     selectObject("node", id);
     updateStats();
+    $("#property-name")?.focus();
+    $("#property-name")?.select();
   });
   state.svg.addEventListener("pointermove", (event) => {
     if (!state.drag || state.drag.pointerId !== event.pointerId) return;
@@ -180,7 +195,8 @@ function setupMapInteractions() {
 }
 
 function formInput(label, id, value, type = "text") {
-  return `<label>${label}<input id="property-${id}" type="${type}" value="${String(value ?? "").replaceAll('"', "&quot;")}"></label>`;
+  const escaped = String(value ?? "").replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return `<label>${label}<input id="property-${id}" type="${type}" value="${escaped}"></label>`;
 }
 
 function renderProperties() {
@@ -195,21 +211,73 @@ function renderProperties() {
 function renderNodeProperties(title, container, node) {
   if (!node) { state.selected = null; renderProperties(); return; }
   title.textContent = "Node properties";
-  container.innerHTML = `${formInput("ID", "id", node.id)}<label>Type<select id="property-type">${nodeTypes.map((type) => `<option ${type === node.type ? "selected" : ""}>${type}</option>`).join("")}</select></label>${formInput("Name", "name", node.name || "")}${formInput("Building", "building", node.building, "number")}${formInput("Floor", "floor", node.floor, "number")}<div class="inline-fields">${formInput("X", "x", node.x, "number")}${formInput("Y", "y", node.y, "number")}</div><button id="delete-selected" class="danger" type="button">Delete node</button>`;
-  ["id", "type", "name", "building", "floor", "x", "y"].forEach((field) => $(`#property-${field}`).addEventListener("change", () => updateNode(node, field)));
+  container.innerHTML = `${formInput("ID", "id", node.id)}<label>Type<select id="property-type">${nodeTypes.map((type) => `<option ${type === node.type ? "selected" : ""}>${type}</option>`).join("")}</select></label>${formInput("Name", "name", node.name || "")}${formInput("Building", "building", node.building, "number")}${formInput("Floor", "floor", node.floor, "number")}<div class="inline-fields">${formInput("X", "x", node.x, "number")}${formInput("Y", "y", node.y, "number")}</div>${formInput("Photo URL", "photo", node.photo || "")}<label>Upload photo<input id="property-photo-file" type="file" accept="image/jpeg,image/png,image/webp"></label><img id="node-photo-preview" class="photo-preview" alt="Node reference photo" hidden><button id="remove-photo" class="secondary" type="button" ${node.photo ? "" : "hidden"}>Remove photo</button><button id="delete-selected" class="danger" type="button">Delete node</button>`;
+  ["id", "type", "name", "building", "floor", "x", "y", "photo"].forEach((field) => $(`#property-${field}`).addEventListener("change", () => updateNode(node, field)));
+  const preview = $("#node-photo-preview");
+  if (node.photo) {
+    preview.src = node.photo;
+    preview.hidden = false;
+  }
+  $("#property-photo-file").addEventListener("change", (event) => uploadNodePhoto(node, event.target.files[0]));
+  $("#remove-photo").addEventListener("click", () => {
+    node.photo = undefined;
+    $("#property-photo").value = "";
+    preview.removeAttribute("src");
+    preview.hidden = true;
+    $("#remove-photo").hidden = true;
+    setStatus("Photo removed from this node. Save the graph to keep the change.");
+  });
   $("#delete-selected").addEventListener("click", () => removeNode(node));
+}
+
+async function uploadNodePhoto(node, file) {
+  if (!file) return;
+  if (file.size > 8 * 1024 * 1024) {
+    setStatus("Photo exceeds the 8 MB limit.", true);
+    return;
+  }
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    setStatus("Choose a JPEG, PNG, or WebP image.", true);
+    return;
+  }
+  setStatus("Uploading photo…");
+  try {
+    const response = await fetch("/api/photos", {
+      method: "POST",
+      headers: { "Content-Type": file.type, "X-Admin-Token": currentAdminPassword() },
+      body: file,
+    });
+    const payload = await response.json();
+    if (response.status === 401) throw new Error("Wrong admin password. Enter the password in the left panel.");
+    if (!response.ok) throw new Error(payload.detail || "Could not upload photo.");
+    node.photo = payload.photo;
+    if (state.selected?.type === "node" && state.selected.value === node.id) {
+      renderNodeProperties($("#properties-title"), $("#properties"), node);
+    }
+    setStatus("Photo uploaded. Save the graph to keep its reference.");
+  } catch (error) {
+    setStatus(error.message || "Could not upload photo.", true);
+  }
 }
 
 function updateNode(node, field) {
   const input = $(`#property-${field}`);
   const oldId = node.id;
-  node[field] = ["building", "floor", "x", "y"].includes(field) ? Number(input.value) : input.value;
+  if (field === "photo") node.photo = input.value.trim() || undefined;
+  else node[field] = ["building", "floor", "x", "y"].includes(field) ? Number(input.value) : input.value;
   if (field === "id" && node.id !== oldId) {
     if (!node.id || state.graph.nodes.some((item) => item !== node && item.id === node.id)) { node.id = oldId; input.value = oldId; setStatus("Node IDs must be unique and non-empty.", true); return; }
     state.graph.edges.forEach((edge) => { if (edge.from === oldId) edge.from = node.id; if (edge.to === oldId) edge.to = node.id; });
     state.selected.value = node.id;
   }
   if (["x", "y"].includes(field)) updateAutoDistances(node.id);
+  if (field === "photo") {
+    const preview = $("#node-photo-preview");
+    const removePhoto = $("#remove-photo");
+    preview.src = node.photo || "";
+    preview.hidden = !node.photo;
+    removePhoto.hidden = !node.photo;
+  }
   renderOverlay(); updateStats();
 }
 
@@ -240,8 +308,8 @@ function validateGraph() {
   const known = new Set(ids);
   const missing = state.graph.edges.filter((edge) => !known.has(edge.from) || !known.has(edge.to));
   if (missing.length) messages.push(`✗ ${missing.length} edge(s) reference missing nodes`); else messages.push("✓ All edges reference existing nodes");
-  const namelessRooms = state.graph.nodes.filter((node) => node.type === "room" && !String(node.name || "").trim());
-  if (namelessRooms.length) messages.push(`✗ ${namelessRooms.length} room(s) have no name`); else messages.push("✓ All rooms have names");
+  const unnamed = state.graph.nodes.filter((node) => !String(node.name || "").trim());
+  if (unnamed.length) messages.push(`⚠ ${unnamed.length} point(s) have no name (they are not searchable)`); else messages.push("✓ All points have names");
   const adjacency = new Map(state.graph.nodes.map((node) => [node.id, new Set()]));
   state.graph.edges.forEach((edge) => {
     if (!adjacency.has(edge.from) || !adjacency.has(edge.to)) return;
@@ -283,15 +351,20 @@ function exportGraph() {
   setStatus("Graph exported.");
 }
 
+function currentAdminPassword() {
+  return $("#admin-password").value;
+}
+
 async function saveGraph() {
   if (!validateGraph()) {
     setStatus("Fix validation issues before saving.", true);
     return;
   }
+  verifyToken += 1; // ignore in-flight password checks, save status is authoritative
   setStatus("Saving graph…");
   const response = await fetch("/api/graph", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Admin-Token": currentAdminPassword() },
     body: JSON.stringify({
       nodes: state.graph.nodes,
       edges: state.graph.edges,
@@ -299,6 +372,10 @@ async function saveGraph() {
     }),
   });
   const payload = await response.json();
+  if (response.status === 401) {
+    setStatus("Wrong admin password. Enter the admin password in the left panel to save.", true);
+    return;
+  }
   if (!response.ok) {
     setStatus(payload.detail || "Could not save graph.", true);
     return;
@@ -308,7 +385,8 @@ async function saveGraph() {
 
 
 async function loadFloor() {
-  const floor = state.graph.floors.find((item) => Number(item.floor) === Number(state.floor));
+  const floor = state.graph.floors.find((item) => Number(item.building) === Number(state.building)
+    && Number(item.floor) === Number(state.floor));
   if (!floor) return;
   const response = await fetch(`/maps/${encodeURIComponent(floor.map)}`);
   if (!response.ok) throw new Error(`Could not load map: ${floor.map}`);
@@ -322,24 +400,58 @@ async function loadFloor() {
 
 function renderFloorOptions() {
   const select = $("#floor-select"); select.replaceChildren();
-  state.graph.floors.forEach((floor) => { const option = document.createElement("option"); option.value = floor.floor; option.textContent = `Building ${floor.building} · Floor ${floor.floor}`; select.append(option); });
-  select.value = state.floor;
+  state.graph.floors.forEach((floor) => { const option = document.createElement("option"); option.value = `${floor.building}:${floor.floor}`; option.textContent = `Building ${floor.building} · Floor ${floor.floor}`; select.append(option); });
+  select.value = `${state.building}:${state.floor}`;
 }
 
 async function initialize() {
+  const adminPasswordInput = $("#admin-password");
+  adminPasswordInput.value = sessionStorage.getItem("unimap-admin-password") || "";
+  adminPasswordInput.addEventListener("change", async () => {
+    sessionStorage.setItem("unimap-admin-password", adminPasswordInput.value);
+    if (!adminPasswordInput.value) return;
+    const token = ++verifyToken;
+    try {
+      const verify = await fetch("/api/admin/verify", {
+        method: "POST",
+        headers: { "X-Admin-Token": adminPasswordInput.value },
+      });
+      if (token !== verifyToken) return;
+      setStatus(
+        verify.ok
+          ? "Admin password accepted — saving is unlocked."
+          : "Admin password is incorrect.",
+        !verify.ok
+      );
+    } catch {
+      if (token !== verifyToken) return;
+      setStatus("Could not verify the admin password.", true);
+    }
+  });
   const response = await fetch("/api/graph");
   if (!response.ok) throw new Error("Could not load graph");
   state.graph = await response.json();
   state.graph.nodes.forEach((node) => { node.x ??= 0; node.y ??= 0; });
+  state.building = Number(state.graph.floors[0]?.building || 1);
   state.floor = Number(state.graph.floors[0]?.floor || 1);
   renderFloorOptions(); updateStats(); renderProperties(); await loadFloor();
 }
 
 document.querySelectorAll("[data-tool]").forEach((button) => button.addEventListener("click", () => setTool(button.dataset.tool)));
-$("#floor-select").addEventListener("change", async (event) => { state.floor = Number(event.target.value); state.selected = null; state.pendingEdge = null; renderProperties(); await loadFloor(); });
+
+$("#floor-select").addEventListener("change", async (event) => {
+  const [building, floor] = event.target.value.split(":").map(Number);
+  state.building = building;
+  state.floor = floor;
+  state.selected = null;
+  state.pendingEdge = null;
+  renderProperties();
+  await loadFloor();
+});
+
 $("#validate-button").addEventListener("click", () => { const valid = validateGraph(); setStatus(valid ? "Graph is valid." : "Validation found issues.", !valid); });
 $("#save-button").addEventListener("click", () => saveGraph().catch((error) => { console.error(error); setStatus("Could not save the graph.", true); }));
 $("#export-button").addEventListener("click", exportGraph);
-$("#import-input").addEventListener("change", async (event) => { const file = event.target.files[0]; if (!file) return; try { state.graph = JSON.parse(await file.text()); state.floor = Number(state.graph.floors?.[0]?.floor || state.graph.nodes?.[0]?.floor || 1); renderFloorOptions(); updateStats(); renderProperties(); await loadFloor(); setStatus("Graph imported."); } catch { setStatus("The selected file is not valid graph JSON.", true); } });
+$("#import-input").addEventListener("change", async (event) => { const file = event.target.files[0]; if (!file) return; try { state.graph = JSON.parse(await file.text()); state.building = Number(state.graph.floors?.[0]?.building || state.graph.nodes?.[0]?.building || 1); state.floor = Number(state.graph.floors?.[0]?.floor || state.graph.nodes?.[0]?.floor || 1); renderFloorOptions(); updateStats(); renderProperties(); await loadFloor(); setStatus("Graph imported."); } catch { setStatus("The selected file is not valid graph JSON.", true); } });
 
 initialize().catch((error) => { console.error(error); setStatus("Could not load the graph editor.", true); validation.textContent = String(error.message); validation.classList.add("error"); });

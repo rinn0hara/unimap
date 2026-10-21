@@ -10,14 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 NodeType = Literal[
-    "room",
-    "door",
-    "corridor",
-    "intersection",
+    "street",
+    "normal",
     "stairs",
     "elevator",
-    "entrance",
-    "connection",
 ]
 
 
@@ -31,6 +27,7 @@ class Node(BaseModel):
     name: str | None = None
     x: float | None = None
     y: float | None = None
+    photo: str | None = None
 
 
 class Edge(BaseModel):
@@ -77,10 +74,6 @@ class GraphData(BaseModel):
                 raise ValueError(
                     f"edge references missing node: {edge.from_} -> {edge.to}"
                 )
-
-        for node in self.nodes:
-            if node.type == "room" and not (node.name or "").strip():
-                raise ValueError(f"room {node.id} must have a name")
 
         return self
 

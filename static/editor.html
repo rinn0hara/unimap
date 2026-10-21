@@ -12,6 +12,9 @@
     .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .tool-button { border: 1px solid var(--line); color: var(--ink); background: white; font-size: .82rem; }
     .tool-button.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+    .create-defaults { display:grid; grid-template-columns:1fr 1.2fr; gap:8px; margin-top:12px; }
+    .create-defaults label { display:grid; gap:4px; color:var(--muted); font-size:.72rem; font-weight:700; }
+    .create-defaults input, .create-defaults select { min-width:0; width:100%; border:1px solid var(--line); border-radius:7px; padding:8px; font:inherit; }
     .editor-actions { display: grid; gap: 8px; margin-top: 18px; }
     .secondary { color: var(--accent); background: var(--accent-soft); }
     .danger { color: #a72727; background: #fff0f0; }
@@ -38,6 +41,7 @@
     .validation { margin-top:15px; border-radius:8px; padding:10px; background:#f4f7fa; color:#52606d; font-size:.78rem; white-space:pre-wrap; }
     .validation.error { background:#fff0f0; color:#9c2929; }
     .stat { color:var(--muted); font-size:.78rem; }
+    .photo-preview { width:100%; max-height:180px; object-fit:contain; border:1px solid var(--line); border-radius:8px; background:#eef2f5; }
     @media (max-width: 1050px) { .editor-layout { grid-template-columns: 240px minmax(0,1fr); } .properties-panel { grid-column: 1 / -1; } }
     @media (max-width: 700px) { .editor-layout { grid-template-columns:1fr; width:calc(100% - 20px); } .editor-map { grid-row:1; } .editor-map-canvas { min-height:320px; } }
   </style>
@@ -61,7 +65,12 @@
         <button class="tool-button" data-tool="edge" type="button">Add edge</button>
         <button class="tool-button" data-tool="delete" type="button">Delete</button>
       </div>
+      <div class="create-defaults" aria-label="New node defaults">
+        <label>New point type<select id="new-node-type"><option value="normal">normal</option><option value="street">street</option><option value="stairs">stairs</option><option value="elevator">elevator</option></select></label>
+        <label>New point name<input id="new-node-name" type="text" placeholder="Optional"></label>
+      </div>
       <div class="editor-actions">
+        <label class="field"><span>Admin password</span><input id="admin-password" type="password" placeholder="Required to save" autocomplete="off"></label>
         <label class="field"><span>Floor plan</span><select id="floor-select"></select></label>
         <button id="validate-button" class="secondary" type="button">Validate graph</button>
         <button id="save-button" class="primary" type="button">Save graph</button>

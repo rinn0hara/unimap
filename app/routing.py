@@ -14,8 +14,16 @@ class RouteNotFoundError(ValueError):
 
 
 @dataclass(frozen=True)
+class RouteStep:
+    from_node: str
+    to_node: str
+    edge: Edge
+
+
+@dataclass(frozen=True)
 class RouteResult:
     route: list[str]
+    edges: list[RouteStep]
     distance: float
     cost: float
 
@@ -62,6 +70,7 @@ def calculate_route(
     distances = {node_id: float("inf") for node_id in graph.nodes_by_id}
     physical_distances = {node_id: float("inf") for node_id in graph.nodes_by_id}
     previous: dict[str, str | None] = {node_id: None for node_id in graph.nodes_by_id}
+    previous_edge: dict[str, Edge] = {}
     distances[start] = 0
     physical_distances[start] = 0
     queue: list[tuple[float, str]] = [(0, start)]
@@ -87,6 +96,7 @@ def calculate_route(
                     physical_distances[current] + edge.distance
                 )
                 previous[neighbor] = current
+                previous_edge[neighbor] = edge
                 heapq.heappush(queue, (candidate_cost, neighbor))
 
     if distances[destination] == float("inf"):
@@ -94,13 +104,21 @@ def calculate_route(
 
     route: list[str] = []
     current: str | None = destination
+    reverse_route_steps: list[RouteStep] = []
     while current is not None:
         route.append(current)
-        current = previous[current]
+        predecessor = previous[current]
+        if predecessor is not None:
+            reverse_route_steps.append(
+                RouteStep(predecessor, current, previous_edge[current])
+            )
+        current = predecessor
     route.reverse()
+    reverse_route_steps.reverse()
 
     return RouteResult(
         route=route,
+        edges=reverse_route_steps,
         distance=physical_distances[destination],
         cost=distances[destination],
     )

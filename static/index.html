@@ -34,6 +34,15 @@
         <div id="to-results" class="suggestions" role="listbox"></div>
       </label>
 
+      <details id="point-browser" class="point-browser" open>
+        <summary>Choose a point from the graph</summary>
+        <label class="field point-filter">
+          <span class="visually-hidden">Filter graph points</span>
+          <input id="point-filter" type="search" placeholder="Filter by room, point, floor…" autocomplete="off">
+        </label>
+        <div id="point-list" class="point-list" aria-label="Graph points"></div>
+      </details>
+
       <fieldset class="preferences">
         <legend>Route preferences</legend>
         <label><input id="avoid-stairs" type="checkbox"> Avoid stairs</label>
@@ -44,18 +53,40 @@
       <button id="route-button" class="primary" type="button">Calculate route</button>
       <p id="status" class="status" role="status"></p>
       <div id="route-summary" class="route-summary" hidden></div>
+      <div id="point-photo-details" class="point-photo-details" hidden></div>
+      <ol id="route-steps" class="route-steps" hidden></ol>
     </section>
 
     <section class="panel map-panel" aria-labelledby="map-heading">
       <div class="map-toolbar">
         <div>
           <p class="eyebrow">Map</p>
-          <h2 id="map-heading">Building 1</h2>
+          <h2 id="map-heading">Building 1 · Floor 1</h2>
         </div>
         <div id="floor-tabs" class="floor-tabs" role="tablist" aria-label="Floor selection"></div>
       </div>
+      <div id="pick-panel" class="pick-panel" role="group" aria-label="Route points on the map">
+        <div id="pick-from" class="pick-slot" role="button" tabindex="0" aria-pressed="false">
+          <span class="pick-dot dot-from"></span>
+          <span class="pick-text"><small>Start</small><span data-pick-label="from" class="pick-label">Click a point on the map</span></span>
+          <button id="clear-from" class="pick-clear" type="button" aria-label="Clear start" title="Clear start">×</button>
+        </div>
+        <button id="swap-points" class="pick-swap" type="button" aria-label="Swap start and destination" title="Swap start and destination">⇄</button>
+        <div id="pick-to" class="pick-slot" role="button" tabindex="0" aria-pressed="false">
+          <span class="pick-dot dot-to"></span>
+          <span class="pick-text"><small>Destination</small><span data-pick-label="to" class="pick-label">Click a point on the map</span></span>
+          <button id="clear-to" class="pick-clear" type="button" aria-label="Clear destination" title="Clear destination">×</button>
+        </div>
+      </div>
       <div id="map" class="map" aria-label="Interactive floor map"></div>
-      <p class="map-hint">Select a floor to inspect the route. The highlighted line follows graph node coordinates.</p>
+      <div class="map-legend" aria-label="Marker legend">
+        <span><i class="legend-dot" style="background:#2f9e62"></i> street</span>
+        <span><i class="legend-dot" style="background:#9aa8b6"></i> normal</span>
+        <span><i class="legend-dot" style="background:#df9d2c"></i> stairs</span>
+        <span><i class="legend-dot" style="background:#4e87d9"></i> elevator</span>
+        <span><i class="legend-dot" style="background:var(--route)"></i> route</span>
+      </div>
+      <p class="map-hint">Click a point on the map to set the start, then another for the destination, or activate a slot above first. Select a floor to inspect the route.</p>
     </section>
   </main>
   <script src="/assets/app.js" type="module"></script>

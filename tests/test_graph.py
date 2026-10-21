@@ -9,10 +9,10 @@ from app.routing import RouteNotFoundError, calculate_route
 SAMPLE_GRAPH = GraphData.model_validate(
     {
         "nodes": [
-            {"id": "start", "type": "entrance", "building": 1, "floor": 1, "x": 0, "y": 0},
+            {"id": "start", "type": "street", "building": 1, "floor": 1, "x": 0, "y": 0},
             {"id": "stairs", "type": "stairs", "building": 1, "floor": 1, "x": 10, "y": 0},
             {"id": "elevator", "type": "elevator", "building": 1, "floor": 1, "x": 0, "y": 10},
-            {"id": "destination", "type": "room", "name": "101", "building": 1, "floor": 1, "x": 20, "y": 0},
+            {"id": "destination", "type": "normal", "name": "101", "building": 1, "floor": 1, "x": 20, "y": 0},
         ],
         "edges": [
             {"from": "start", "to": "stairs", "distance": 1, "stairs": True, "bidirectional": True},
@@ -32,6 +32,16 @@ def test_dijkstra_returns_shortest_physical_route_by_default() -> None:
     assert result.cost == 2
 
 
+def test_route_result_keeps_the_edges_between_consecutive_nodes() -> None:
+    result = calculate_route(SAMPLE_GRAPH, "start", "destination")
+
+    assert [(step.from_node, step.to_node) for step in result.edges] == [
+        ("start", "stairs"),
+        ("stairs", "destination"),
+    ]
+    assert all(step.edge.stairs for step in result.edges)
+
+
 def test_avoid_stairs_selects_longer_route() -> None:
     result = calculate_route(SAMPLE_GRAPH, "start", "destination", avoid_stairs=True)
 
@@ -44,10 +54,10 @@ def test_prefer_elevator_can_choose_a_longer_elevator_route() -> None:
     graph = GraphData.model_validate(
         {
             "nodes": [
-                {"id": "start", "type": "entrance", "building": 1, "floor": 1, "x": 0, "y": 0},
+                {"id": "start", "type": "street", "building": 1, "floor": 1, "x": 0, "y": 0},
                 {"id": "stairs", "type": "stairs", "building": 1, "floor": 1, "x": 10, "y": 0},
                 {"id": "elevator", "type": "elevator", "building": 1, "floor": 1, "x": 0, "y": 10},
-                {"id": "destination", "type": "room", "name": "101", "building": 1, "floor": 1, "x": 20, "y": 0},
+                {"id": "destination", "type": "normal", "name": "101", "building": 1, "floor": 1, "x": 20, "y": 0},
             ],
             "edges": [
                 {"from": "start", "to": "stairs", "distance": 5},
@@ -69,8 +79,8 @@ def test_missing_route_raises_domain_error() -> None:
     graph = GraphData.model_validate(
         {
             "nodes": [
-                {"id": "a", "type": "corridor", "building": 1, "floor": 1, "x": 0, "y": 0},
-                {"id": "b", "type": "corridor", "building": 1, "floor": 1, "x": 1, "y": 1},
+                {"id": "a", "type": "normal", "building": 1, "floor": 1, "x": 0, "y": 0},
+                {"id": "b", "type": "normal", "building": 1, "floor": 1, "x": 1, "y": 1},
             ],
             "edges": [],
         }
@@ -93,8 +103,8 @@ def test_duplicate_edges_are_rejected() -> None:
         GraphData.model_validate(
             {
                 "nodes": [
-                    {"id": "a", "type": "corridor", "building": 1, "floor": 1, "x": 0, "y": 0},
-                    {"id": "b", "type": "corridor", "building": 1, "floor": 1, "x": 1, "y": 1},
+                    {"id": "a", "type": "normal", "building": 1, "floor": 1, "x": 0, "y": 0},
+                    {"id": "b", "type": "normal", "building": 1, "floor": 1, "x": 1, "y": 1},
                 ],
                 "edges": [
                     {"from": "a", "to": "b", "distance": 1},
@@ -109,8 +119,8 @@ def test_bidirectional_reverse_edges_are_rejected() -> None:
         GraphData.model_validate(
             {
                 "nodes": [
-                    {"id": "a", "type": "corridor", "building": 1, "floor": 1, "x": 0, "y": 0},
-                    {"id": "b", "type": "corridor", "building": 1, "floor": 1, "x": 1, "y": 1},
+                    {"id": "a", "type": "normal", "building": 1, "floor": 1, "x": 0, "y": 0},
+                    {"id": "b", "type": "normal", "building": 1, "floor": 1, "x": 1, "y": 1},
                 ],
                 "edges": [
                     {"from": "a", "to": "b", "distance": 1, "bidirectional": True},
@@ -120,11 +130,73 @@ def test_bidirectional_reverse_edges_are_rejected() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "legacy_type",
+    ["room", "corridor", "door", "intersection", "entrance", "connection"],
+)
+def test_legacy_node_types_are_rejected(legacy_type: str) -> None:
+    with pytest.raises(ValueError):
+        GraphData.model_validate(
+            {
+                "nodes": [{"id": "a", "type": legacy_type, "building": 1, "floor": 1}],
+                "edges": [],
+            }
+        )
+
+
+def test_unknown_node_type_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        GraphData.model_validate(
+            {
+                "nodes": [{"id": "a", "type": "banana", "building": 1, "floor": 1}],
+                "edges": [],
+            }
+        )
+
+
+def test_node_photo_is_preserved(tmp_path) -> None:
+    document = GraphDocument.model_validate(
+        {
+            "nodes": [
+                {
+                    "id": "room_101",
+                    "type": "normal",
+                    "name": "101",
+                    "building": 1,
+                    "floor": 1,
+                    "x": 10,
+                    "y": 20,
+                    "photo": "photos/room_101.jpg",
+                }
+            ],
+            "edges": [],
+            "floors": [],
+        }
+    )
+
+    path = save_graph(tmp_path, document)
+    loaded = load_graph_document(tmp_path)
+
+    assert path.name == "graph.json"
+    assert loaded.nodes[0].photo == "photos/room_101.jpg"
+
+
+def test_room_without_name_is_allowed() -> None:
+    graph = GraphData.model_validate(
+        {
+            "nodes": [{"id": "waypoint_1", "type": "normal", "building": 1, "floor": 1}],
+            "edges": [],
+        }
+    )
+
+    assert graph.nodes[0].name is None
+
+
 def test_saved_document_is_loaded_from_canonical_file(tmp_path) -> None:
     document = GraphDocument.model_validate(
         {
             "nodes": [
-                {"id": "room_test", "type": "room", "name": "Test", "building": 1, "floor": 1, "x": 10, "y": 20}
+                {"id": "room_test", "type": "normal", "name": "Test", "building": 1, "floor": 1, "x": 10, "y": 20}
             ],
             "edges": [],
             "floors": [{"building": 1, "floor": 1, "map": "test.svg"}],
@@ -142,8 +214,8 @@ def test_edge_preserves_editor_auto_distance_flag() -> None:
     graph = GraphData.model_validate(
         {
             "nodes": [
-                {"id": "a", "type": "corridor", "building": 1, "floor": 1, "x": 0, "y": 0},
-                {"id": "b", "type": "corridor", "building": 1, "floor": 1, "x": 3, "y": 4},
+                {"id": "a", "type": "normal", "building": 1, "floor": 1, "x": 0, "y": 0},
+                {"id": "b", "type": "normal", "building": 1, "floor": 1, "x": 3, "y": 4},
             ],
             "edges": [{"from": "a", "to": "b", "distance": 5, "autoDistance": True}],
         }
@@ -158,7 +230,7 @@ def test_invalid_edge_reference_is_rejected() -> None:
         GraphData.model_validate(
             {
                 "nodes": [
-                    {"id": "a", "type": "corridor", "building": 1, "floor": 1, "x": 0, "y": 0}
+                    {"id": "a", "type": "normal", "building": 1, "floor": 1, "x": 0, "y": 0}
                 ],
                 "edges": [{"from": "a", "to": "missing", "distance": 1}],
             }
