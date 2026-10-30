@@ -1,26 +1,33 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Graph Editor · Uni Map</title>
+  <title>Редактор графа · unimap</title>
   <link rel="stylesheet" href="/assets/styles.css">
   <style>
     .editor-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr) 280px; gap: 16px; width: min(1500px, calc(100% - 32px)); margin: 16px auto 40px; }
     .editor-panel { padding: 18px; }
     .editor-panel h2 { margin-bottom: 16px; }
     .tool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .tool-button { border: 1px solid var(--line); color: var(--ink); background: white; font-size: .82rem; }
+    .tool-button { border: 1px solid var(--line); color: var(--ink); background: var(--surface); font-size: .82rem; }
     .tool-button.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
     .create-defaults { display:grid; grid-template-columns:1fr 1.2fr; gap:8px; margin-top:12px; }
     .create-defaults label { display:grid; gap:4px; color:var(--muted); font-size:.72rem; font-weight:700; }
     .create-defaults input, .create-defaults select { min-width:0; width:100%; border:1px solid var(--line); border-radius:7px; padding:8px; font:inherit; }
+    .interfloor-settings { display:grid; gap:8px; margin-top:12px; border-top:1px solid var(--line); padding-top:12px; }
+    .interfloor-settings[hidden] { display:none; }
+    .interfloor-settings label { display:grid; gap:4px; color:var(--muted); font-size:.72rem; font-weight:700; }
+    .interfloor-settings select, .interfloor-settings input { width:100%; border:1px solid var(--line); border-radius:7px; padding:8px; font:inherit; }
+    .connector-help { margin:0; color:var(--muted); font-size:.72rem; line-height:1.45; }
+    #cancel-connector[hidden] { display:none; }
     .editor-actions { display: grid; gap: 8px; margin-top: 18px; }
     .secondary { color: var(--accent); background: var(--accent-soft); }
-    .danger { color: #a72727; background: #fff0f0; }
+    .danger { color: #ffb4b4; background: #50272c; }
     .editor-map { min-width: 0; padding: 14px; }
     .editor-map-toolbar { display:flex; align-items:center; justify-content:space-between; gap: 12px; margin-bottom: 12px; }
-    .editor-map-canvas { display:grid; min-height: 620px; place-items:center; overflow:auto; border: 1px solid var(--line); border-radius: 12px; padding: 12px; background:#eef2f5; }
+    .editor-map-canvas { display:grid; min-height: 620px; place-items:center; overflow:auto; border: 1px solid var(--line); border-radius: 12px; padding: 12px; background:var(--map-bg); }
+    .editor-map-canvas.loading { pointer-events:none; opacity:.65; }
     .editor-map-canvas svg { width:min(100%, 820px); height:auto; overflow:visible; }
     .editor-map-canvas svg.editor-cursor-node { cursor: crosshair; }
     .editor-map-canvas svg.editor-cursor-edge { cursor: pointer; }
@@ -30,18 +37,18 @@
     .editor-node { stroke:white; stroke-width:3; pointer-events:all; cursor:grab; }
     .editor-node.selected { stroke:var(--route); stroke-width:5; }
     .editor-node.pending { stroke:#f3a928; stroke-width:5; }
-    .editor-node-label { pointer-events:none; fill:var(--ink); font-size:11px; font-weight:700; paint-order:stroke; stroke:white; stroke-width:4px; }
+    .editor-node-label { pointer-events:none; fill:#15202b; font-size:11px; font-weight:700; paint-order:stroke; stroke:white; stroke-width:4px; }
     .editor-form { display:grid; gap:10px; }
     .editor-form label { display:grid; gap:5px; color:var(--muted); font-size:.75rem; font-weight:700; }
-    .editor-form input, .editor-form select { width:100%; border:1px solid var(--line); border-radius:7px; padding:8px; font:inherit; }
+    .editor-form input, .editor-form select, .editor-form textarea { width:100%; border:1px solid var(--line); border-radius:7px; padding:8px; font:inherit; }
     .inline-fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
     .checkbox-row { display:flex !important; grid-template-columns:none !important; align-items:center; gap:7px; }
     .checkbox-row input { width:auto; }
     .empty-state { color:var(--muted); font-size:.85rem; line-height:1.5; }
-    .validation { margin-top:15px; border-radius:8px; padding:10px; background:#f4f7fa; color:#52606d; font-size:.78rem; white-space:pre-wrap; }
-    .validation.error { background:#fff0f0; color:#9c2929; }
+    .validation { margin-top:15px; border-radius:8px; padding:10px; background:var(--surface); color:var(--muted); font-size:.78rem; white-space:pre-wrap; }
+    .validation.error { background:#50272c; color:#ffb4b4; }
     .stat { color:var(--muted); font-size:.78rem; }
-    .photo-preview { width:100%; max-height:180px; object-fit:contain; border:1px solid var(--line); border-radius:8px; background:#eef2f5; }
+    .photo-preview { width:100%; max-height:180px; object-fit:contain; border:1px solid var(--line); border-radius:8px; background:var(--map-bg); }
     @media (max-width: 1050px) { .editor-layout { grid-template-columns: 240px minmax(0,1fr); } .properties-panel { grid-column: 1 / -1; } }
     @media (max-width: 700px) { .editor-layout { grid-template-columns:1fr; width:calc(100% - 20px); } .editor-map { grid-row:1; } .editor-map-canvas { min-height:320px; } }
   </style>
@@ -49,53 +56,61 @@
 <body>
   <header class="topbar">
     <div>
-      <p class="eyebrow">UNI MAP · ADMIN</p>
-      <h1>Graph Editor</h1>
+      <p class="eyebrow">unimap · администрирование</p>
+      <h1>Редактор графа</h1>
     </div>
-    <a class="editor-link" href="/">← Navigation app</a>
+    <a class="editor-link" href="/">← К карте</a>
   </header>
 
   <main class="editor-layout">
     <aside class="panel editor-panel">
-      <p class="eyebrow">Tools</p>
-      <h2>Build navigation graph</h2>
-      <div class="tool-grid" aria-label="Editor tools">
-        <button class="tool-button active" data-tool="select" type="button">Select / move</button>
-        <button class="tool-button" data-tool="node" type="button">Add node</button>
-        <button class="tool-button" data-tool="edge" type="button">Add edge</button>
-        <button class="tool-button" data-tool="delete" type="button">Delete</button>
+      <p class="eyebrow">Инструменты</p>
+      <h2>Редактирование карты</h2>
+      <div class="tool-grid" aria-label="Инструменты редактора">
+        <button class="tool-button active" data-tool="select" type="button">Выбрать / переместить</button>
+        <button class="tool-button" data-tool="node" type="button">Добавить точку</button>
+        <button class="tool-button" data-tool="edge" type="button">Добавить связь</button>
+        <button class="tool-button" data-tool="connector" type="button">Соединить этажи</button>
+        <button class="tool-button" data-tool="delete" type="button">Удалить</button>
       </div>
-      <div class="create-defaults" aria-label="New node defaults">
-        <label>New point type<select id="new-node-type"><option value="normal">normal</option><option value="street">street</option><option value="stairs">stairs</option><option value="elevator">elevator</option></select></label>
-        <label>New point name<input id="new-node-name" type="text" placeholder="Optional"></label>
+      <div class="create-defaults" aria-label="Параметры новой точки">
+        <label>Тип точки<select id="new-node-type"><option value="normal">Точка</option><option value="street">Улица</option><option value="stairs">Лестница</option><option value="elevator">Лифт</option></select></label>
+        <label>Название<input id="new-node-name" type="text" placeholder="Необязательно"></label>
+      </div>
+      <div id="interfloor-settings" class="interfloor-settings" hidden>
+        <label>Тип перехода<select id="interfloor-kind"><option value="elevator">Лифт</option><option value="stairs">Лестница</option><option value="passage">Другой переход</option></select></label>
+        <label>Длина перехода<input id="interfloor-distance" type="number" min="0" step="0.1" value="6"></label>
+        <label class="checkbox-row"><input id="interfloor-bidirectional" type="checkbox" checked> В обоих направлениях</label>
+        <p class="connector-help">Выберите точку лифта или лестницы, переключите этаж и выберите соответствующую точку. Для изменения перехода нажмите на его обозначение в режиме выбора.</p>
+        <button id="cancel-connector" class="secondary" type="button" hidden>Отменить выбор точки</button>
       </div>
       <div class="editor-actions">
-        <label class="field"><span>Admin password</span><input id="admin-password" type="password" placeholder="Required to save" autocomplete="off"></label>
-        <label class="field"><span>Floor plan</span><select id="floor-select"></select></label>
-        <button id="validate-button" class="secondary" type="button">Validate graph</button>
-        <button id="save-button" class="primary" type="button">Save graph</button>
-        <button id="export-button" class="secondary" type="button">Export JSON</button>
+        <label class="field"><span>Пароль администратора</span><input id="admin-password" type="password" placeholder="Для сохранения" autocomplete="current-password"></label>
+        <label class="field"><span>План этажа</span><select id="floor-select"></select></label>
+        <button id="validate-button" class="secondary" type="button">Проверить граф</button>
+        <button id="save-button" class="primary" type="button">Сохранить граф</button>
+        <button id="export-button" class="secondary" type="button">Скачать файл графа</button>
         <label class="secondary" style="display:block;text-align:center;padding:12px 16px;border-radius:10px;font-weight:750;cursor:pointer;">
-          Import JSON<input id="import-input" type="file" accept="application/json" hidden>
+          Загрузить файл графа<input id="import-input" type="file" accept="application/json" hidden>
         </label>
       </div>
       <p id="editor-status" class="status" role="status"></p>
-      <div id="validation" class="validation">Load a graph to begin.</div>
+      <div id="validation" class="validation">Загрузите граф для начала работы.</div>
     </aside>
 
     <section class="panel editor-map">
       <div class="editor-map-toolbar">
-        <div><p class="eyebrow">SVG coordinate space</p><h2 id="map-title">Floor plan</h2></div>
+        <div><p class="eyebrow">Карта</p><h2 id="map-title">План этажа</h2></div>
         <p id="graph-stat" class="stat"></p>
       </div>
       <div id="editor-map-canvas" class="editor-map-canvas"></div>
-      <p class="map-hint">Node mode: click the map. Edge mode: click two nodes. Select mode: drag nodes or click an object to edit it.</p>
+      <p class="map-hint">Чтобы добавить точку, нажмите на карту. Чтобы добавить связь, выберите две точки. Для перехода между этажами выберите точку, переключите этаж и выберите вторую. В режиме выбора точки можно перемещать и редактировать.</p>
     </section>
 
     <aside class="panel editor-panel properties-panel">
-      <p class="eyebrow">Properties</p>
-      <h2 id="properties-title">Nothing selected</h2>
-      <div id="properties" class="empty-state">Select a node or edge to edit its properties.</div>
+      <p class="eyebrow">Свойства</p>
+      <h2 id="properties-title">Ничего не выбрано</h2>
+      <div id="properties" class="empty-state">Выберите точку или связь, чтобы изменить её свойства.</div>
     </aside>
   </main>
   <script src="/assets/editor.js" type="module"></script>

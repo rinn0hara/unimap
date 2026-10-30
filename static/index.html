@@ -1,92 +1,59 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Indoor University Navigation</title>
+  <title>unimap — навигация</title>
   <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
   <header class="topbar">
-    <div>
-      <p class="eyebrow">UNI MAP · MVP</p>
-      <h1>Indoor University Navigation</h1>
+    <div><p class="eyebrow">Навигация по университету</p><h1>unimap</h1></div>
+    <div class="admin-menu">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Открыть меню" aria-expanded="false" aria-controls="menu-panel">☰</button>
+      <div id="menu-panel" class="menu-panel" hidden>
+        <strong>Редактор графа</strong>
+        <p>Для входа введите пароль администратора.</p>
+        <form id="admin-login">
+          <label class="field"><span>Пароль</span><input id="menu-password" type="password" autocomplete="current-password" required></label>
+          <button class="primary" type="submit">Войти в редактор</button>
+          <p id="login-status" class="status" role="status"></p>
+        </form>
+      </div>
     </div>
-    <a class="editor-link" href="/editor">Graph editor</a>
   </header>
 
   <main class="layout">
     <section class="panel controls" aria-labelledby="route-heading">
-      <div class="panel-heading">
-        <p class="eyebrow">Plan a route</p>
-        <h2 id="route-heading">Where do you want to go?</h2>
-      </div>
-
-      <label class="field">
-        <span>Start</span>
-        <input id="from-input" type="search" placeholder="Search a room or entrance" autocomplete="off">
-        <div id="from-results" class="suggestions" role="listbox"></div>
-      </label>
-
-      <label class="field">
-        <span>Destination</span>
-        <input id="to-input" type="search" placeholder="Search for a room" autocomplete="off">
-        <div id="to-results" class="suggestions" role="listbox"></div>
-      </label>
-
-      <details id="point-browser" class="point-browser" open>
-        <summary>Choose a point from the graph</summary>
-        <label class="field point-filter">
-          <span class="visually-hidden">Filter graph points</span>
-          <input id="point-filter" type="search" placeholder="Filter by room, point, floor…" autocomplete="off">
-        </label>
-        <div id="point-list" class="point-list" aria-label="Graph points"></div>
-      </details>
-
+      <div class="panel-heading"><p class="eyebrow">Маршрут</p><h2 id="route-heading">Куда направимся?</h2></div>
+      <label class="field"><span>Откуда</span><input id="from-input" type="search" placeholder="Название или тег точки" autocomplete="off"><div id="from-results" class="suggestions" role="listbox"></div></label>
+      <label class="field"><span>Куда</span><input id="to-input" type="search" placeholder="Название или тег точки" autocomplete="off"><div id="to-results" class="suggestions" role="listbox"></div></label>
       <fieldset class="preferences">
-        <legend>Route preferences</legend>
-        <label><input id="avoid-stairs" type="checkbox"> Avoid stairs</label>
-        <label><input id="avoid-outdoor" type="checkbox"> Avoid outdoor paths</label>
-        <label><input id="prefer-elevator" type="checkbox"> Prefer elevators</label>
+        <legend>Пожелания к маршруту</legend>
+        <label><input id="avoid-stairs" type="checkbox"> Избегать лестниц</label>
+        <label><input id="avoid-outdoor" type="checkbox"> Избегать улицы</label>
+        <label><input id="prefer-elevator" type="checkbox"> Предпочитать лифт</label>
       </fieldset>
-
-      <button id="route-button" class="primary" type="button">Calculate route</button>
+      <p id="route-preference-note" class="preference-note">Это пожелания, а не ограничения: если другого пути нет, маршрут может проходить через лестницу или улицу.</p>
+      <button id="route-button" class="primary" type="button">Построить маршрут</button>
       <p id="status" class="status" role="status"></p>
       <div id="route-summary" class="route-summary" hidden></div>
-      <div id="point-photo-details" class="point-photo-details" hidden></div>
       <ol id="route-steps" class="route-steps" hidden></ol>
     </section>
 
     <section class="panel map-panel" aria-labelledby="map-heading">
-      <div class="map-toolbar">
-        <div>
-          <p class="eyebrow">Map</p>
-          <h2 id="map-heading">Building 1 · Floor 1</h2>
-        </div>
-        <div id="floor-tabs" class="floor-tabs" role="tablist" aria-label="Floor selection"></div>
+      <div class="map-toolbar"><div><p class="eyebrow">Карта</p><h2 id="map-heading">Корпус 1 · Этаж 1</h2></div><div id="floor-tabs" class="floor-tabs" role="tablist" aria-label="Выбор этажа"></div></div>
+      <div id="pick-panel" class="pick-panel" role="group" aria-label="Точки маршрута на карте">
+        <div id="pick-from" class="pick-slot" role="button" tabindex="0" aria-pressed="false"><span class="pick-dot dot-from"></span><span class="pick-text"><small>Откуда</small><span data-pick-label="from" class="pick-label">Выберите точку</span></span><button id="clear-from" class="pick-clear" type="button" aria-label="Очистить начало маршрута" title="Очистить начало маршрута">×</button></div>
+        <button id="swap-points" class="pick-swap" type="button" aria-label="Поменять точки местами" title="Поменять точки местами">⇄</button>
+        <div id="pick-to" class="pick-slot" role="button" tabindex="0" aria-pressed="false"><span class="pick-dot dot-to"></span><span class="pick-text"><small>Куда</small><span data-pick-label="to" class="pick-label">Выберите точку</span></span><button id="clear-to" class="pick-clear" type="button" aria-label="Очистить назначение" title="Очистить назначение">×</button></div>
       </div>
-      <div id="pick-panel" class="pick-panel" role="group" aria-label="Route points on the map">
-        <div id="pick-from" class="pick-slot" role="button" tabindex="0" aria-pressed="false">
-          <span class="pick-dot dot-from"></span>
-          <span class="pick-text"><small>Start</small><span data-pick-label="from" class="pick-label">Click a point on the map</span></span>
-          <button id="clear-from" class="pick-clear" type="button" aria-label="Clear start" title="Clear start">×</button>
-        </div>
-        <button id="swap-points" class="pick-swap" type="button" aria-label="Swap start and destination" title="Swap start and destination">⇄</button>
-        <div id="pick-to" class="pick-slot" role="button" tabindex="0" aria-pressed="false">
-          <span class="pick-dot dot-to"></span>
-          <span class="pick-text"><small>Destination</small><span data-pick-label="to" class="pick-label">Click a point on the map</span></span>
-          <button id="clear-to" class="pick-clear" type="button" aria-label="Clear destination" title="Clear destination">×</button>
-        </div>
+      <div id="map" class="map" aria-label="Интерактивная карта этажа"></div>
+      <div class="map-legend" aria-label="Обозначения на карте">
+        <span><i class="legend-dot" style="background:#2f9e62"></i> улица</span><span><i class="legend-dot" style="background:#9aa8b6"></i> точка</span><span><i class="legend-dot" style="background:#df9d2c"></i> лестница</span><span><i class="legend-dot" style="background:#4e87d9"></i> лифт</span><span><i class="legend-dot" style="background:var(--route)"></i> маршрут</span>
       </div>
-      <div id="map" class="map" aria-label="Interactive floor map"></div>
-      <div class="map-legend" aria-label="Marker legend">
-        <span><i class="legend-dot" style="background:#2f9e62"></i> street</span>
-        <span><i class="legend-dot" style="background:#9aa8b6"></i> normal</span>
-        <span><i class="legend-dot" style="background:#df9d2c"></i> stairs</span>
-        <span><i class="legend-dot" style="background:#4e87d9"></i> elevator</span>
-        <span><i class="legend-dot" style="background:var(--route)"></i> route</span>
-      </div>
-      <p class="map-hint">Click a point on the map to set the start, then another for the destination, or activate a slot above first. Select a floor to inspect the route.</p>
+      <p class="map-hint">Нажмите на точку, чтобы узнать о ней больше. Для выбора маршрута воспользуйтесь карточкой точки, поиском или полями над картой.</p>
+      <section id="point-photo-details" class="point-photo-details" aria-label="Информация о точке" hidden></section>
     </section>
   </main>
   <script src="/assets/app.js" type="module"></script>

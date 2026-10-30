@@ -50,6 +50,48 @@ def test_avoid_stairs_selects_longer_route() -> None:
     assert result.cost == 8
 
 
+def test_avoid_stairs_is_a_preference_penalty_not_a_hard_block() -> None:
+    graph = GraphData.model_validate(
+        {
+            "nodes": [
+                {"id": "a", "type": "normal", "building": 1, "floor": 1},
+                {"id": "stairs", "type": "stairs", "building": 1, "floor": 2},
+            ],
+            "edges": [{"from": "a", "to": "stairs", "distance": 7, "stairs": True}],
+        }
+    )
+
+    result = calculate_route(graph, "a", "stairs", avoid_stairs=True)
+
+    assert result.route == ["a", "stairs"]
+    assert result.distance == 7
+    assert result.cost > result.distance
+
+
+def test_avoid_outdoor_selects_indoor_route() -> None:
+    graph = GraphData.model_validate(
+        {
+            "nodes": [
+                {"id": "start", "type": "street", "building": 1, "floor": 1},
+                {"id": "outdoor", "type": "normal", "building": 1, "floor": 1},
+                {"id": "indoor", "type": "normal", "building": 1, "floor": 1},
+                {"id": "destination", "type": "normal", "building": 1, "floor": 1},
+            ],
+            "edges": [
+                {"from": "start", "to": "outdoor", "distance": 1, "outdoor": True},
+                {"from": "outdoor", "to": "destination", "distance": 1, "outdoor": True},
+                {"from": "start", "to": "indoor", "distance": 8},
+                {"from": "indoor", "to": "destination", "distance": 8},
+            ],
+        }
+    )
+
+    result = calculate_route(graph, "start", "destination", avoid_outdoor=True)
+
+    assert result.route == ["start", "indoor", "destination"]
+    assert result.distance == 16
+
+
 def test_prefer_elevator_can_choose_a_longer_elevator_route() -> None:
     graph = GraphData.model_validate(
         {
@@ -179,6 +221,43 @@ def test_node_photo_is_preserved(tmp_path) -> None:
 
     assert path.name == "graph.json"
     assert loaded.nodes[0].photo == "photos/room_101.jpg"
+
+
+def test_node_map_label_is_preserved(tmp_path) -> None:
+    document = GraphDocument.model_validate(
+        {
+            "nodes": [
+                {
+                    "id": "lift_lobby",
+                    "type": "elevator",
+                    "name": "Elevator",
+                    "label": "Lift lobby →",
+                    "building": 1,
+                    "floor": 2,
+                    "x": 15,
+                    "y": 25,
+                }
+            ],
+            "edges": [],
+            "floors": [],
+        }
+    )
+
+    save_graph(tmp_path, document)
+    loaded = load_graph_document(tmp_path)
+
+    assert loaded.nodes[0].label == "Lift lobby →"
+
+
+def test_node_label_is_optional() -> None:
+    node = GraphData.model_validate(
+        {
+            "nodes": [{"id": "plain", "type": "normal", "building": 1, "floor": 1}],
+            "edges": [],
+        }
+    ).nodes[0]
+
+    assert node.label is None
 
 
 def test_room_without_name_is_allowed() -> None:

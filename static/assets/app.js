@@ -1,8 +1,11 @@
 import {
   groupRouteSegments as routeSegments,
+  routeEdgeForStep,
+  routePreferenceNotes,
   transitionForEdge as edgeTransition,
   transitionLabel as transition,
 } from "./route-model.mjs";
+import { nodeCaption, nodeDetails } from "./node-display.mjs";
 
 const state = {
   nodes: [],
@@ -13,6 +16,7 @@ const state = {
   focusedRouteNode: null,
   selected: { from: null, to: null },
   picking: null, // "from" | "to" | null — which route point the next map click fills
+  inspected: null,
   route: null,
 };
 
@@ -24,6 +28,7 @@ const stepsElement = $("#route-steps");
 const photoDetailsElement = $("#point-photo-details");
 const SVG_NS = "http://www.w3.org/2000/svg";
 const TYPE_COLORS = { street: "#2f9e62", normal: "#9aa8b6", stairs: "#df9d2c", elevator: "#4e87d9" };
+const TYPE_LABELS = { street: "улица", normal: "точка", stairs: "лестница", elevator: "лифт" };
 // How close (in SVG units) a click on the floor plan must be to snap to a vertex.
 const PICK_RADIUS = 40;
 
@@ -43,30 +48,86 @@ function routeSegmentFloors() {
 }
 
 function routeEdge(fromId, toId) {
-  return state.route?.edges?.find((edge) => edge.from === fromId && edge.to === toId) || null;
+  return routeEdgeForStep(state.route?.edges || [], fromId, toId);
 }
 
 function renderPointPhoto(node) {
   photoDetailsElement.replaceChildren();
-  if (!node?.photo) {
+  if (!node) {
     photoDetailsElement.hidden = true;
     return;
   }
-  const heading = document.createElement("strong");
-  heading.textContent = `Photo · ${nodeLabel(node)}`;
-  const image = document.createElement("img");
-  image.src = node.photo;
-  image.alt = `Reference photo for ${nodeLabel(node)}`;
-  image.loading = "lazy";
-  image.addEventListener("error", () => {
-    photoDetailsElement.textContent = `Could not load photo for ${nodeLabel(node)}.`;
-  }, { once: true });
-  photoDetailsElement.append(heading, image);
+  const details = nodeDetails(node);
+  const heading = document.createElement("div");
+  heading.className = "point-details-heading";
+  const title = document.createElement("h3");
+  title.className = "point-details-title";
+  title.textContent = nodeLabel(node);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "point-details-close";
+  close.setAttribute("aria-label", "Закрыть карточку точки");
+  close.textContent = "×";
+  close.addEventListener("click", () => { state.inspected = null; renderPointPhoto(null); renderNodeMarkers(); });
+  heading.append(title, close);
+  photoDetailsElement.append(heading);
+  const location = document.createElement("p");
+  location.className = "point-location";
+  location.textContent = `Корпус ${node.building} · Этаж ${node.floor} · ${TYPE_LABELS[node.type] || "точка"}`;
+  photoDetailsElement.append(location);
+  if (details.caption) {
+    const caption = document.createElement("p");
+    caption.className = "point-details-caption";
+    caption.textContent = details.caption;
+    photoDetailsElement.append(caption);
+  }
+  if (details.description) {
+    const description = document.createElement("p");
+    description.className = "point-description";
+    description.textContent = details.description;
+    photoDetailsElement.append(description);
+  }
+  if (details.tags.length) {
+    const tags = document.createElement("div");
+    tags.className = "point-tags";
+    details.tags.forEach((tag) => { const chip = document.createElement("span"); chip.textContent = tag; tags.append(chip); });
+    photoDetailsElement.append(tags);
+  }
+  if (details.photos.length) {
+    const gallery = document.createElement("div");
+    gallery.className = "point-gallery";
+    for (const [index, photo] of details.photos.entries()) {
+      const image = document.createElement("img");
+      image.src = photo;
+      image.alt = `Фото ${index + 1}: ${nodeLabel(node)}`;
+      image.loading = "lazy";
+      image.addEventListener("error", () => {
+        image.remove();
+        const error = document.createElement("p");
+        error.className = "point-details-photo-error";
+        error.textContent = `Не удалось загрузить фото ${index + 1}.`;
+        gallery.append(error);
+      }, { once: true });
+      gallery.append(image);
+    }
+    photoDetailsElement.append(gallery);
+  }
+  const actions = document.createElement("div");
+  actions.className = "point-actions";
+  for (const [field, text] of [["from", "Отсюда"], ["to", "Сюда"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = text;
+    button.addEventListener("click", () => setPickPoint(field, node));
+    actions.append(button);
+  }
+  photoDetailsElement.append(actions);
   photoDetailsElement.hidden = false;
 }
 
 function updateSelectionPhoto() {
-  renderPointPhoto(nodeById(state.selected.to) || nodeById(state.selected.from));
+  renderPointPhoto(nodeById(state.inspected));
 }
 
 function setStatus(message, isError = false) {
@@ -90,7 +151,7 @@ function updateMapHeading() {
     (item) => Number(item.building) === Number(state.currentBuilding)
       && Number(item.floor) === Number(state.currentFloor)
   );
-  if (floor) $("#map-heading").textContent = `Building ${floor.building} · Floor ${floor.floor}`;
+  if (floor) $("#map-heading").textContent = `Корпус ${floor.building} · Этаж ${floor.floor}`;
 }
 
 function setPicking(slot, options = {}) {
@@ -102,8 +163,8 @@ function setPicking(slot, options = {}) {
   fromSlot.classList.toggle("active", slot === "from");
   toSlot.classList.toggle("active", slot === "to");
   const hint = {
-    from: "Click a graph point on the map to set the start.",
-    to: "Click a graph point on the map to set the destination.",
+    from: "Нажмите на точку на карте, чтобы выбрать начало маршрута.",
+    to: "Нажмите на точку на карте, чтобы выбрать назначение.",
   }[slot];
   if (hint && !options.silent) setStatus(hint);
 }
@@ -116,13 +177,10 @@ function selectedNodeLabel(field) {
 function updatePickPanel() {
   const fromLabel = selectedNodeLabel("from");
   const toLabel = selectedNodeLabel("to");
-  document.querySelector('[data-pick-label="from"]').textContent = fromLabel || "Click a point on the map";
-  document.querySelector('[data-pick-label="to"]').textContent = toLabel || "Click a point on the map";
+  document.querySelector('[data-pick-label="from"]').textContent = fromLabel || "Выберите точку";
+  document.querySelector('[data-pick-label="to"]').textContent = toLabel || "Выберите точку";
   $("#pick-from").classList.toggle("filled", Boolean(fromLabel));
   $("#pick-to").classList.toggle("filled", Boolean(toLabel));
-  if (!state.picking) {
-    setPicking(!fromLabel ? "from" : !toLabel ? "to" : null, { silent: true });
-  }
 }
 
 function clearPickPoint(field) {
@@ -134,8 +192,7 @@ function clearPickPoint(field) {
   renderNodeMarkers();
   updatePickPanel();
   updateSelectionPhoto();
-  renderPointList();
-  setStatus(`Click a graph point on the map to set the ${field === "from" ? "start" : "destination"}.`);
+  setStatus(`Нажмите на точку на карте, чтобы выбрать ${field === "from" ? "начало маршрута" : "назначение"}.`);
 }
 
 function swapPickPoints() {
@@ -151,49 +208,46 @@ function swapPickPoints() {
     renderFloorTabs();
     loadMap().catch((error) => {
       console.error(error);
-      setStatus("Could not load the selected start point's floor.", true);
+      setStatus("Не удалось загрузить этаж начальной точки.", true);
     });
   }
   renderNodeMarkers();
   updatePickPanel();
   updateSelectionPhoto();
-  renderPointList();
 }
 
 function setPickPoint(field, node) {
   clearRouteDisplay();
   state.selected[field] = node.id;
+  state.inspected = node.id;
   $(`#${field}-input`).value = nodeLabel(node);
   $(`#${field}-results`).replaceChildren();
   state.currentBuilding = Number(node.building);
   state.currentFloor = Number(node.floor);
-  setPicking(field === "from" ? "to" : null);
+  setPicking(null, { silent: true });
   renderFloorTabs();
   loadMap().catch((error) => {
     console.error(error);
-    setStatus("Could not load the selected point's floor.", true);
+    setStatus("Не удалось загрузить этаж выбранной точки.", true);
   });
   renderNodeMarkers();
   updateSelectionPhoto();
-  renderPointList();
   updatePickPanel();
   setStatus(
     state.selected.from && state.selected.to
-      ? `Start set to “${selectedNodeLabel("from")}”, destination set to “${selectedNodeLabel("to")}”. Press Calculate route.`
-      : `${field === "from" ? "Start" : "Destination"} set to “${nodeLabel(node)}”. Press Calculate route, or set the remaining point.`
+      ? `Откуда: «${selectedNodeLabel("from")}», куда: «${selectedNodeLabel("to")}». Постройте маршрут.`
+      : `${field === "from" ? "Начало маршрута" : "Назначение"}: «${nodeLabel(node)}». Выберите вторую точку.`
   );
 }
 
 function pickNode(node) {
+  state.inspected = node.id;
   if (state.picking) {
     setPickPoint(state.picking, node);
     return;
   }
-  if (!state.selected.from || (state.selected.from && state.selected.to)) {
-    setPickPoint("from", node);
-  } else if (state.selected.from !== node.id) {
-    setPickPoint("to", node);
-  }
+  renderPointPhoto(node);
+  renderNodeMarkers();
 }
 
 function renderFloorTabs() {
@@ -207,7 +261,7 @@ function renderFloorTabs() {
     const onRoute = routeFloors.has(`${building}_${floorNumber}`);
     button.className = `floor-tab${building === state.currentBuilding && floorNumber === state.currentFloor ? " active" : ""}${onRoute ? " has-route" : ""}`;
     button.type = "button";
-    button.textContent = `B${building} · F${floorNumber}`;
+    button.textContent = `Корпус ${building} · этаж ${floorNumber}`;
     button.setAttribute("aria-selected", String(building === state.currentBuilding && floorNumber === state.currentFloor));
     button.addEventListener("click", () => {
       state.currentBuilding = building;
@@ -215,7 +269,7 @@ function renderFloorTabs() {
       renderFloorTabs();
       loadMap().catch((error) => {
         console.error(error);
-        setStatus("Could not load the floor map.", true);
+        setStatus("Не удалось загрузить карту этажа.", true);
       });
     });
     container.append(button);
@@ -230,7 +284,7 @@ async function loadMap() {
     && Number(item.floor) === Number(state.currentFloor));
   if (!floor) {
     if (request === state.mapRequest) {
-      mapElement.textContent = "No floor map is configured.";
+      mapElement.textContent = "Карта этажа не настроена.";
       mapElement.classList.remove("loading");
       mapElement.setAttribute("aria-busy", "false");
     }
@@ -302,7 +356,7 @@ function renderNodeMarkers() {
   if (!svg) return;
   svg.querySelector(".map-nodes")?.remove();
   const layer = document.createElementNS(SVG_NS, "g");
-  layer.setAttribute("aria-label", "Graph points");
+  layer.setAttribute("aria-label", "Точки на карте");
   layer.setAttribute("class", "map-nodes");
   for (const node of state.nodes) {
     if (Number(node.building) !== Number(state.currentBuilding)) continue;
@@ -312,19 +366,31 @@ function renderNodeMarkers() {
     marker.setAttribute("class", "map-node");
     if (state.selected.from === node.id) marker.classList.add("picked-from");
     if (state.selected.to === node.id) marker.classList.add("picked-to");
+    if (state.inspected === node.id) marker.classList.add("inspected");
     marker.setAttribute("cx", node.x);
     marker.setAttribute("cy", node.y);
     marker.setAttribute("r", node.name ? "9" : "6");
     marker.style.fill = TYPE_COLORS[node.type] || "#81909f";
     marker.setAttribute("aria-label", nodeLabel(node));
+    marker.setAttribute("role", "button");
+    marker.setAttribute("tabindex", "0");
     const tooltip = document.createElementNS(SVG_NS, "title");
-    tooltip.textContent = `${nodeLabel(node)}${node.name ? ` · ${node.type}` : ""}`;
+    tooltip.textContent = `${nodeLabel(node)}${node.name ? ` · ${TYPE_LABELS[node.type] || "точка"}` : ""}${nodeCaption(node) ? ` · ${nodeCaption(node)}` : ""}`;
     marker.append(tooltip);
     marker.addEventListener("click", (event) => {
       event.stopPropagation();
       pickNode(node);
     });
+    marker.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); pickNode(node); } });
     layer.append(marker);
+    if (nodeCaption(node)) {
+      const caption = document.createElementNS(SVG_NS, "text");
+      caption.setAttribute("class", "map-node-caption");
+      caption.setAttribute("x", Number(node.x) + 12);
+      caption.setAttribute("y", Number(node.y) - 10);
+      caption.textContent = nodeCaption(node);
+      layer.append(caption);
+    }
   }
   svg.append(layer);
 }
@@ -341,7 +407,7 @@ function drawRoute() {
 
   const overlay = document.createElementNS(SVG_NS, "g");
   overlay.classList.add("route-overlay");
-  overlay.setAttribute("aria-label", "Calculated route");
+  overlay.setAttribute("aria-label", "Построенный маршрут");
 
   for (const segment of segments) {
     const line = document.createElementNS(SVG_NS, "polyline");
@@ -375,7 +441,7 @@ function drawRoute() {
     focus.setAttribute("cx", focusedNode.x);
     focus.setAttribute("cy", focusedNode.y);
     focus.setAttribute("r", "16");
-    focus.setAttribute("aria-label", `Current step: ${nodeLabel(focusedNode)}`);
+    focus.setAttribute("aria-label", `Текущий шаг: ${nodeLabel(focusedNode)}`);
     overlay.append(focus);
   }
 
@@ -400,9 +466,9 @@ function drawRoute() {
 function transitionBadge(overlay, atNode, targetNode, edge) {
   const kind = edgeTransition(edge);
   const destination = Number(atNode.building) !== Number(targetNode.building)
-    ? `B${targetNode.building} F${targetNode.floor}`
-    : `F${targetNode.floor}`;
-  const label = `${kind === "elevator" ? "Elevator" : kind === "stairs" ? "Stairs" : "Continue"} → ${destination}`;
+    ? `корп. ${targetNode.building}, эт. ${targetNode.floor}`
+    : `эт. ${targetNode.floor}`;
+  const label = `${kind === "elevator" ? "Лифт" : kind === "stairs" ? "Лестница" : "Переход"} → ${destination}`;
   const x = Number(atNode.x);
   const y = Number(atNode.y);
   const group = document.createElementNS(SVG_NS, "g");
@@ -430,7 +496,7 @@ function showRouteFloor(building, floor, nodeId = null) {
   renderFloorTabs();
   loadMap().catch((error) => {
     console.error(error);
-    setStatus("Could not load the floor map.", true);
+    setStatus("Не удалось загрузить карту этажа.", true);
   });
 }
 
@@ -444,10 +510,10 @@ function renderRouteSteps(routeNodes) {
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "route-floor-chip";
-    chip.textContent = `B${segment.building} · F${segment.floor}`;
+    chip.textContent = `Корп. ${segment.building} · эт. ${segment.floor}`;
     chip.setAttribute(
       "aria-label",
-      `Show floor ${segment.floor} of building ${segment.building} on the map`
+      `Показать этаж ${segment.floor} корпуса ${segment.building} на карте`
     );
     chip.addEventListener("click", () => showRouteFloor(segment.building, segment.floor, segment.nodes[0].id));
 
@@ -471,10 +537,10 @@ function renderRouteSteps(routeNodes) {
     transitionChip.type = "button";
     transitionChip.className = "route-floor-chip transition";
     const destination = Number(segment.building) !== Number(next.building)
-      ? `building ${next.building}`
-      : `floor ${next.floor}`;
-    transitionChip.textContent = `Take ${transition(viaKind)} to ${destination}`;
-    transitionChip.setAttribute("aria-label", `Show building ${next.building}, floor ${next.floor} on the map`);
+      ? `корпус ${next.building}, этаж ${next.floor}`
+      : `этаж ${next.floor}`;
+    transitionChip.textContent = `${transition(viaKind)} → ${destination}`;
+    transitionChip.setAttribute("aria-label", `Показать корпус ${next.building}, этаж ${next.floor} на карте`);
     transitionChip.addEventListener("click", () => showRouteFloor(next.building, next.floor, nextNode.id));
     transitionItem.append(transitionChip);
     stepsElement.append(transitionItem);
@@ -495,7 +561,7 @@ function renderSuggestions(field, nodes) {
     button.type = "button";
     button.append(document.createTextNode(nodeLabel(node)));
     const details = document.createElement("small");
-    details.textContent = `${node.type} · Building ${node.building}, floor ${node.floor}`;
+    details.textContent = `${TYPE_LABELS[node.type] || "точка"}${nodeCaption(node) ? ` · ${nodeCaption(node)}` : ""} · корпус ${node.building}, этаж ${node.floor}${node.tags?.length ? ` · ${node.tags.join(", ")}` : ""}`;
     button.append(details);
     button.addEventListener("click", () => chooseSuggestion(field, node));
     container.append(button);
@@ -507,70 +573,20 @@ async function search(field, value) {
   state.selected[field] = null;
   renderNodeMarkers();
   updatePickPanel();
-  renderPointPhoto(nodeById(state.selected.to) || nodeById(state.selected.from));
-  renderPointList();
   if (!value.trim()) {
     renderSuggestions(field, []);
     return;
   }
   const response = await fetch(`/api/search?q=${encodeURIComponent(value)}`);
-  if (response.ok) renderSuggestions(field, await response.json());
-}
-
-function renderPointList() {
-  const container = $("#point-list");
-  const query = $("#point-filter").value.trim().toLocaleLowerCase();
-  const matching = state.nodes.filter((node) => {
-    const searchable = `${node.name || ""} ${node.id} ${node.type} ${node.building} ${node.floor}`;
-    return searchable.toLocaleLowerCase().includes(query);
-  }).sort((left, right) => Number(left.building) - Number(right.building)
-    || Number(left.floor) - Number(right.floor)
-    || nodeLabel(left).localeCompare(nodeLabel(right), undefined, { numeric: true }));
-
-  container.replaceChildren();
-  if (!matching.length) {
-    container.textContent = "No graph points match.";
-    return;
-  }
-
-  const groups = new Map();
-  for (const node of matching) {
-    const key = `${node.building}_${node.floor}`;
-    if (!groups.has(key)) groups.set(key, { building: node.building, floor: node.floor, nodes: [] });
-    groups.get(key).nodes.push(node);
-  }
-  for (const group of groups.values()) {
-    const section = document.createElement("section");
-    section.className = "point-group";
-    const heading = document.createElement("h3");
-    heading.textContent = `Building ${group.building} · Floor ${group.floor}`;
-    section.append(heading);
-    for (const node of group.nodes) {
-      const row = document.createElement("div");
-      row.className = "point-row";
-      const label = document.createElement("span");
-      label.className = "point-row-label";
-      label.textContent = `${nodeLabel(node)} · ${node.type}`;
-      row.append(label);
-      for (const [field, text] of [["from", "Start"], ["to", "Goal"]]) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = `point-select ${field}`;
-        button.textContent = text;
-        button.setAttribute("aria-label", `Set ${nodeLabel(node)} as ${field === "from" ? "start" : "destination"}`);
-        button.setAttribute("aria-pressed", String(state.selected[field] === node.id));
-        button.addEventListener("click", () => setPickPoint(field, node));
-        row.append(button);
-      }
-      section.append(row);
-    }
-    container.append(section);
+  if (response.ok) {
+    const nodes = await response.json();
+    if ($(`#${field}-input`).value === value) renderSuggestions(field, nodes);
   }
 }
 
 function setupSearch(field) {
   const input = $(`#${field}-input`);
-  input.addEventListener("input", () => search(field, input.value));
+  input.addEventListener("input", () => search(field, input.value).catch(() => setStatus("Не удалось выполнить поиск.", true)));
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       const first = $(`#${field}-results .suggestion`);
@@ -579,14 +595,46 @@ function setupSearch(field) {
   });
 }
 
+function setupAdminMenu() {
+  const toggle = $("#menu-toggle");
+  const panel = $("#menu-panel");
+  const password = $("#menu-password");
+  const message = $("#login-status");
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+    if (open) password.focus();
+  };
+  toggle.addEventListener("click", () => setOpen(panel.hidden));
+  document.addEventListener("click", (event) => { if (!event.target.closest(".admin-menu")) setOpen(false); });
+  document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !panel.hidden) { setOpen(false); toggle.focus(); } });
+  $("#admin-login").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector("button");
+    button.disabled = true;
+    message.textContent = "Проверяем пароль…";
+    try {
+      const response = await fetch("/api/admin/verify", { method: "POST", headers: { "X-Admin-Token": password.value } });
+      if (response.status === 401) { message.textContent = "Неверный пароль."; return; }
+      if (!response.ok) throw new Error("verification failed");
+      sessionStorage.setItem("unimap-admin-password", password.value);
+      window.location.assign("/editor");
+    } catch {
+      message.textContent = "Не удалось проверить пароль. Попробуйте ещё раз.";
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
+
 async function calculateRoute() {
   const from = state.selected.from;
   const to = state.selected.to;
   if (!from || !to) {
-    setStatus("Choose both a start point and a destination.", true);
+    setStatus("Выберите начало и назначение маршрута.", true);
     return;
   }
-  setStatus("Calculating route…");
+  setStatus("Строим маршрут…");
   const response = await fetch("/api/route", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -600,7 +648,7 @@ async function calculateRoute() {
   });
   const payload = await response.json();
   if (!response.ok) {
-    setStatus(payload.detail || "No route found.", true);
+    setStatus("Маршрут не найден. Проверьте выбранные точки.", true);
     return;
   }
   state.route = payload;
@@ -610,10 +658,31 @@ async function calculateRoute() {
   renderFloorTabs();
   await loadMap();
   renderRouteSteps(payload.nodes);
-  renderPointPhoto(payload.nodes[payload.nodes.length - 1]);
   summaryElement.hidden = false;
-  summaryElement.innerHTML = `<strong>${payload.distance} map units</strong> ${payload.route.length} navigation points · preference cost ${payload.cost.toFixed(1)}`;
-  setStatus("Route calculated.");
+  summaryElement.replaceChildren();
+  const distance = document.createElement("strong");
+  distance.textContent = `${payload.distance} ед. карты`;
+  const details = document.createElement("span");
+  details.textContent = `Точек маршрута: ${payload.route.length} · стоимость с учётом пожеланий: ${Number(payload.cost).toFixed(1)}`;
+  summaryElement.append(distance, details);
+  const preferenceNotes = routePreferenceNotes(payload.edges, {
+    ...(payload.preferences || {
+      avoid_stairs: $("#avoid-stairs").checked,
+      avoid_outdoor: $("#avoid-outdoor").checked,
+      prefer_elevator: $("#prefer-elevator").checked,
+    }),
+  });
+  if (preferenceNotes.length) {
+    for (const message of preferenceNotes) {
+      const warning = document.createElement("p");
+      warning.className = "route-preference-warning";
+      warning.textContent = message;
+      summaryElement.append(warning);
+    }
+    setStatus("Маршрут найден, но не все пожелания удалось учесть.", true);
+  } else {
+    setStatus("Маршрут построен.");
+  }
 }
 
 async function initialize() {
@@ -625,11 +694,9 @@ async function initialize() {
   state.currentBuilding = Number(state.floors[0]?.building || 1);
   state.currentFloor = Number(state.floors[0]?.floor || 1);
   renderFloorTabs();
-  renderPointList();
-  $("#point-filter").addEventListener("input", renderPointList);
   setupSearch("from");
   setupSearch("to");
-  $("#route-button").addEventListener("click", calculateRoute);
+  $("#route-button").addEventListener("click", () => calculateRoute().catch(() => setStatus("Не удалось построить маршрут.", true)));
   const bindPickSlot = (selector, slot) => {
     const element = $(selector);
     element.addEventListener("click", () => setPicking(slot));
@@ -655,7 +722,8 @@ async function initialize() {
   updatePickPanel();
 }
 
+setupAdminMenu();
 initialize().catch((error) => {
   console.error(error);
-  setStatus("The application could not load its map data.", true);
+  setStatus("Не удалось загрузить данные карты.", true);
 });

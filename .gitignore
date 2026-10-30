@@ -13,3 +13,5 @@ wheels/
 data/
 maps/
 uv.lock
+.python-version
+qrcode.png

@@ -25,9 +25,13 @@ class Node(BaseModel):
     building: int = Field(ge=1)
     floor: int = Field(ge=0)
     name: str | None = None
+    label: str | None = None
     x: float | None = None
     y: float | None = None
     photo: str | None = None
+    photos: list[str] = Field(default_factory=list)
+    description: str | None = None
+    tags: list[str] = Field(default_factory=list)
 
 
 class Edge(BaseModel):

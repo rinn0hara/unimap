@@ -76,11 +76,15 @@ def node_response(node: Node) -> dict[str, object]:
         "id": node.id,
         "type": node.type,
         "name": node.name,
+        "label": node.label,
         "building": node.building,
         "floor": node.floor,
         "x": node.x,
         "y": node.y,
         "photo": node.photo,
+        "photos": node.photos,
+        "description": node.description,
+        "tags": node.tags,
     }
 
 
@@ -134,16 +138,12 @@ def search_rooms(q: str = Query(min_length=1)) -> list[dict[str, object]]:
 
     graph = get_graph()
     matches = [
-        {
-            "id": node.id,
-            "name": node.name,
-            "building": node.building,
-            "floor": node.floor,
-            "type": node.type,
-            "photo": node.photo,
-        }
+        node_response(node)
         for node in graph.nodes
-        if query in node.id.casefold() or query in (node.name or "").casefold()
+        if query in node.id.casefold()
+        or query in (node.name or "").casefold()
+        or query in (node.label or "").casefold()
+        or any(query in tag.casefold() for tag in node.tags)
     ]
     return sorted(matches, key=lambda result: str(result["name"]))
 
@@ -179,6 +179,11 @@ def route(request: RouteRequest) -> dict[str, object]:
         ],
         "distance": result.distance,
         "cost": result.cost,
+        "preferences": {
+            "avoid_stairs": request.avoid_stairs,
+            "avoid_outdoor": request.avoid_outdoor,
+            "prefer_elevator": request.prefer_elevator,
+        },
         "nodes": [node_response(node) for node in route_nodes],
     }
 
