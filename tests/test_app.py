@@ -95,11 +95,15 @@ def test_nodes_endpoint_lists_start_points() -> None:
 
 def test_frontend_and_sample_map_are_served() -> None:
     page = client.get("/")
+    favicon = client.get("/favicon.ico")
     floor_map = client.get("/maps/building1_floor1.svg")
 
     assert page.status_code == 200
     assert '<html lang="ru">' in page.text
     assert "unimap" in page.text
+    assert '<link rel="icon" href="/favicon.ico" sizes="any">' in page.text
+    assert favicon.status_code == 200
+    assert favicon.content.startswith(b"\x00\x00\x01\x00")
     assert floor_map.status_code == 200
     assert "viewBox=\"0 0 620 450\"" in floor_map.text
     assert 'id="point-list"' not in page.text
@@ -579,5 +583,4 @@ def test_admin_verify_endpoint_checks_password(monkeypatch) -> None:
     assert wrong.status_code == 401
     assert correct.status_code == 200
     assert correct.json() == {"status": "ok"}
-
 

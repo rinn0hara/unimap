@@ -93,6 +93,11 @@ def frontend() -> Path:
     return STATIC_DIR / "index.html"
 
 
+@app.get("/favicon.ico", response_class=FileResponse)
+def favicon() -> Path:
+    return STATIC_DIR / "favicon.ico"
+
+
 @app.get("/editor", response_class=FileResponse)
 def editor() -> Path:
     return STATIC_DIR / "editor.html"

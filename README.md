@@ -98,10 +98,6 @@ Node types are intentionally minimal and strict — exactly four:
 - `stairs` — stairwell point (per floor);
 - `elevator` — elevator point (per floor).
 
-Old classifications (`room`, `corridor`, `door`, `intersection`, `entrance`, `connection`)
-are **not** accepted any more: the API rejects them with a validation error, so graph
-files must use the four types above.
-
 Nodes can have a `description`, a list of `tags`, and a list of `photos`. Tags are
 searchable along with the node's name, ID, and map caption. Upload multiple JPEG, PNG,
 or WebP photos in the editor (maximum 8 MB per file), or add image URLs. Uploads are
