@@ -1,0 +1,122 @@
+{
+  "building": 1,
+  "floor": 2,
+  "map": "building1_floor2.svg",
+  "nodes": [
+    {
+      "id": "corridor_2_a",
+      "type": "normal",
+      "building": 1,
+      "floor": 2,
+      "x": 180,
+      "y": 220
+    },
+    {
+      "id": "corridor_2_b",
+      "type": "normal",
+      "building": 1,
+      "floor": 2,
+      "x": 360,
+      "y": 220
+    },
+    {
+      "id": "stairs_2",
+      "type": "stairs",
+      "name": "Stairs",
+      "building": 1,
+      "floor": 2,
+      "x": 500,
+      "y": 220
+    },
+    {
+      "id": "elevator_2",
+      "type": "elevator",
+      "name": "Elevator",
+      "building": 1,
+      "floor": 2,
+      "x": 360,
+      "y": 360
+    },
+    {
+      "id": "room_201",
+      "type": "normal",
+      "name": "201",
+      "building": 1,
+      "floor": 2,
+      "x": 180,
+      "y": 120
+    },
+    {
+      "id": "room_202",
+      "type": "normal",
+      "name": "202",
+      "building": 1,
+      "floor": 2,
+      "x": 280,
+      "y": 120
+    },
+    {
+      "id": "room_203",
+      "type": "normal",
+      "name": "Laboratory 203",
+      "building": 1,
+      "floor": 2,
+      "x": 360,
+      "y": 120
+    }
+  ],
+  "edges": [
+    {
+      "from": "corridor_2_a",
+      "to": "corridor_2_b",
+      "distance": 18,
+      "bidirectional": true
+    },
+    {
+      "from": "corridor_2_b",
+      "to": "stairs_2",
+      "distance": 14,
+      "stairs": true,
+      "bidirectional": true
+    },
+    {
+      "from": "corridor_2_b",
+      "to": "elevator_2",
+      "distance": 14,
+      "elevator": true,
+      "bidirectional": true
+    },
+    {
+      "from": "corridor_2_a",
+      "to": "room_201",
+      "distance": 10,
+      "bidirectional": true
+    },
+    {
+      "from": "corridor_2_b",
+      "to": "room_202",
+      "distance": 12,
+      "bidirectional": true
+    },
+    {
+      "from": "corridor_2_b",
+      "to": "room_203",
+      "distance": 10,
+      "bidirectional": true
+    },
+    {
+      "from": "stairs_1",
+      "to": "stairs_2",
+      "distance": 8,
+      "stairs": true,
+      "bidirectional": true
+    },
+    {
+      "from": "elevator_1",
+      "to": "elevator_2",
+      "distance": 6,
+      "elevator": true,
+      "bidirectional": true
+    }
+  ]
+}

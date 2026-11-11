@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 450" role="img" aria-labelledby="title">
+  <title id="title">Building 1 floor 1 sample floor plan</title>
+  <rect width="620" height="450" fill="#f8fafb"/>
+  <rect x="40" y="40" width="540" height="360" rx="8" fill="#ffffff" stroke="#afbac6" stroke-width="4"/>
+  <path d="M80 220H500M360 80V360M80 220V120H360M360 220V120" fill="none" stroke="#c9d2dc" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="95" y="70" width="80" height="100" rx="4" fill="#edf1f5" stroke="#9daab8"/>
+  <rect id="room_101" x="105" y="80" width="60" height="80" fill="#e4eaf0"/>
+  <text x="135" y="125" text-anchor="middle" fill="#52606d" font-size="15">101</text>
+  <rect x="195" y="70" width="80" height="100" rx="4" fill="#edf1f5" stroke="#9daab8"/>
+  <rect id="room_102" x="205" y="80" width="60" height="80" fill="#e4eaf0"/>
+  <text x="235" y="125" text-anchor="middle" fill="#52606d" font-size="15">102</text>
+  <rect x="315" y="70" width="95" height="100" rx="4" fill="#edf1f5" stroke="#9daab8"/>
+  <rect id="room_103" x="325" y="80" width="75" height="80" fill="#e4eaf0"/>
+  <text x="362" y="125" text-anchor="middle" fill="#52606d" font-size="15">103</text>
+  <rect id="stairs_1" x="465" y="180" width="70" height="80" fill="#fff0d8" stroke="#d69c35" stroke-width="2"/>
+  <path d="M475 245h50M475 230h50M475 215h50M475 200h50" stroke="#b97916" stroke-width="3"/>
+  <text x="500" y="280" text-anchor="middle" fill="#8a5b0d" font-size="13">stairs</text>
+  <rect id="elevator_1" x="330" y="315" width="60" height="60" fill="#e6f0ff" stroke="#6390d8" stroke-width="2"/>
+  <text x="360" y="350" text-anchor="middle" fill="#315ea4" font-size="12">lift</text>
+  <circle id="main_entrance" cx="80" cy="220" r="7" fill="#2457d6"/>
+  <text x="80" y="250" text-anchor="middle" fill="#315ea4" font-size="12">entrance</text>
+  <circle id="corridor_1_a" cx="180" cy="220" r="5" fill="#9aa8b6"/>
+  <circle id="corridor_1_b" cx="360" cy="220" r="5" fill="#9aa8b6"/>
+</svg>

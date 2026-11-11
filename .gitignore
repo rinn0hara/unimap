@@ -9,8 +9,12 @@ wheels/
 # Virtual environments
 .venv
 
-data/
-maps/
+#data/
+#maps/
+
+
+
 uv.lock
 .python-version
-qrcode.png
+
+#qrcode.png
